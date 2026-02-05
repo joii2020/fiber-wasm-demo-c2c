@@ -180,6 +180,34 @@ body {
     background: rgba(15, 47, 46, 0.1);
 }
 
+.fiber-key-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.fiber-key-label {
+    font-size: 0.85rem;
+    color: var(--muted);
+    flex-shrink: 0;
+}
+
+.fiber-key {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.8rem;
+    color: var(--muted);
+    flex: 1;
+    min-width: 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+    outline: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: text;
+}
+
 .field {
     display: grid;
     gap: 8px;

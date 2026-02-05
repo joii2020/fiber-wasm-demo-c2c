@@ -54,6 +54,10 @@ app.innerHTML = `
                     </div>
                     <span class="status" data-role="status">Idle</span>
                 </div>
+                <div class="fiber-key-wrap">
+                    <span class="fiber-key-label">FiberKey:</span>
+                    <input type="text" class="fiber-key" data-role="fiber-key" readonly />
+                </div>
                 <label class="field">
                     <div class="field-row">
                         <span>CKB Secret Key</span>
@@ -98,6 +102,10 @@ app.innerHTML = `
                         <span class="local-sign-wrap">LocalSign <input type="checkbox" data-role="local-sign" /></span>
                     </div>
                     <span class="status" data-role="status">Idle</span>
+                </div>
+                <div class="fiber-key-wrap">
+                    <span class="fiber-key-label">FiberKey:</span>
+                    <input type="text" class="fiber-key" data-role="fiber-key" readonly />
                 </div>
                 <label class="field">
                     <div class="field-row">
@@ -609,6 +617,7 @@ const setupNodeCard = (
     const channelCountEl = card.querySelector<HTMLSpanElement>("[data-role='channel-count']");
     const createChannelBtn = card.querySelector<HTMLButtonElement>("[data-role='create-channel']");
     const refreshChannelsBtn = card.querySelector<HTMLButtonElement>("[data-role='refresh-channels']");
+    const fiberKeyEl = card.querySelector<HTMLInputElement>("[data-role='fiber-key']");
 
     if (
         !statusEl ||
@@ -636,6 +645,10 @@ const setupNodeCard = (
         inputEl.value = defaultNodeKeys.A;
     } else if (nodeRole === "right") {
         inputEl.value = defaultNodeKeys.B;
+    }
+
+    if (fiberKeyEl) {
+        fiberKeyEl.value = fiberClient.getFiberKeyHex();
     }
 
     let status: NodeStatus = "idle";

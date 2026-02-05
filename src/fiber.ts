@@ -121,6 +121,10 @@ export class FiberNode {
         return fiberKeyPair;
     }
 
+    getFiberKeyHex(): string {
+        return hexFrom(this.getFiberKey());
+    }
+
     async createNode(ckbSecretKey: string | undefined) {
         if (this.fiber != null) {
             console.warn(`Node(${this.nodeName}) fiber has been created`);
