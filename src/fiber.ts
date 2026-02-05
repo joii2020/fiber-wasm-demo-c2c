@@ -1,6 +1,28 @@
-import { bytesFrom, hexFrom } from "@ckb-ccc/core";
+import { ClientPublicTestnet, SignerCkbPrivateKey, bytesFrom, hexFrom } from "@ckb-ccc/core";
 import { Fiber, randomSecretKey } from "@nervosnetwork/fiber-js";
 import type { HexString, InvoiceResult, NewInvoiceParams } from "@nervosnetwork/fiber-js";
+
+const parseCkbRpcUrl = (config: string): string => {
+    const match = config.match(/rpc_url:\s*["']([^"']+)["']/);
+    if (!match?.[1]) {
+        throw new Error("CKB rpc_url not found in fiber-config-testnet.yml");
+    }
+    return match[1];
+};
+
+export async function getCkbBalance(secretKey: string): Promise<bigint> {
+    const config = await loadConfig();
+    const rpcUrl = parseCkbRpcUrl(config);
+    const client = new ClientPublicTestnet({ url: rpcUrl });
+    const signer = new SignerCkbPrivateKey(client, secretKey);
+    const address = await signer.getAddressObjSecp256k1();
+    console.log(`Address: ${address.toString()}`)
+    return client.getCellsCapacity({
+        script: address.script,
+        scriptType: "lock",
+        scriptSearchMode: "exact",
+    });
+}
 
 export type RelayNodeInfo = {
     peerId: string;
@@ -99,7 +121,7 @@ export class FiberNode {
         return fiberKeyPair;
     }
 
-    async createNode(ckbSecretKey: string) {
+    async createNode(ckbSecretKey: string | undefined) {
         if (this.fiber != null) {
             console.warn(`Node(${this.nodeName}) fiber has been created`);
             return;
@@ -108,9 +130,9 @@ export class FiberNode {
         const fiber = new Fiber();
 
         const fiberKeyPair = this.getFiberKey();
-        const ckbKey = bytesFrom(ckbSecretKey);
+        const ckbKey = ckbSecretKey != null ? bytesFrom(ckbSecretKey) : undefined;
         const timer = new Timer(`fiber.start ${this.nodeName}`);
-        await fiber.start(config, fiberKeyPair, ckbKey, undefined, "error", `/wasm-${this.nodeName}`);
+        await fiber.start(config, fiberKeyPair, ckbKey as Uint8Array, undefined, "error", `/wasm-${this.nodeName}`);
         timer.stop();
         this.fiber = fiber
     }

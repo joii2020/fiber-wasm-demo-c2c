@@ -4,6 +4,7 @@ import {
     FiberNode,
     type RelayNodeInfo,
     defaultNodeKeys,
+    getCkbBalance,
     getRelayNodeInfo,
     isValidKey,
     relayNodeInfo,
@@ -47,11 +48,24 @@ app.innerHTML = `
             </article>
             <article class="card node" data-node="left" data-delay="1">
                 <div class="card-header">
-                    <h2>Node A</h2>
+                    <div class="card-header-left">
+                        <h2>Node A</h2>
+                        <span class="local-sign-wrap">LocalSign <input type="checkbox" data-role="local-sign" /></span>
+                    </div>
                     <span class="status" data-role="status">Idle</span>
                 </div>
                 <label class="field">
-                    <span>CKB Secret Key</span>
+                    <div class="field-row">
+                        <span>CKB Secret Key</span>
+                        <span class="ckb-balance-wrap" data-role="ckb-balance-wrap">
+                            <button class="ckb-balance-refresh" data-role="refresh-ckb-balance" type="button" aria-label="刷新 CKB 余额">
+                                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                    <path d="M20 12a8 8 0 1 1-2.35-5.65l-1.9 1.9H21V2.5l-1.8 1.8A10 10 0 1 0 22 12h-2Z" />
+                                </svg>
+                            </button>
+                            <span class="ckb-balance" data-role="ckb-balance">-</span>
+                        </span>
+                    </div>
                     <input type="text" placeholder="0x..." data-role="key-input" autocomplete="off" />
                 </label>
                 <div class="actions">
@@ -79,11 +93,24 @@ app.innerHTML = `
             </article>
             <article class="card node" data-node="right" data-delay="2">
                 <div class="card-header">
-                    <h2>Node B</h2>
+                    <div class="card-header-left">
+                        <h2>Node B</h2>
+                        <span class="local-sign-wrap">LocalSign <input type="checkbox" data-role="local-sign" /></span>
+                    </div>
                     <span class="status" data-role="status">Idle</span>
                 </div>
                 <label class="field">
-                    <span>CKB Secret Key</span>
+                    <div class="field-row">
+                        <span>CKB Secret Key</span>
+                        <span class="ckb-balance-wrap" data-role="ckb-balance-wrap">
+                            <button class="ckb-balance-refresh" data-role="refresh-ckb-balance" type="button" aria-label="刷新 CKB 余额">
+                                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                    <path d="M20 12a8 8 0 1 1-2.35-5.65l-1.9 1.9H21V2.5l-1.8 1.8A10 10 0 1 0 22 12h-2Z" />
+                                </svg>
+                            </button>
+                            <span class="ckb-balance" data-role="ckb-balance">-</span>
+                        </span>
+                    </div>
                     <input type="text" placeholder="0x..." data-role="key-input" autocomplete="off" />
                 </label>
                 <div class="actions">
@@ -567,7 +594,11 @@ const setupNodeCard = (
     onStateUpdate?: (state: { status: NodeStatus; channels: Channel[] }) => void,
 ) => {
     const statusEl = card.querySelector<HTMLSpanElement>("[data-role='status']");
+    const localSignCheckbox = card.querySelector<HTMLInputElement>("[data-role='local-sign']");
     const inputEl = card.querySelector<HTMLInputElement>("[data-role='key-input']");
+    const ckbBalanceWrap = card.querySelector<HTMLSpanElement>("[data-role='ckb-balance-wrap']");
+    const refreshCkbBalanceBtn = card.querySelector<HTMLButtonElement>("[data-role='refresh-ckb-balance']");
+    const ckbBalanceEl = card.querySelector<HTMLSpanElement>("[data-role='ckb-balance']");
     const createConnectBtn = card.querySelector<HTMLButtonElement>("[data-role='create-connect']");
     const hintEl = card.querySelector<HTMLDivElement>("[data-role='hint']");
     const createInvoiceBtn = card.querySelector<HTMLButtonElement>("[data-role='create-invoice']");
@@ -581,7 +612,11 @@ const setupNodeCard = (
 
     if (
         !statusEl ||
+        !localSignCheckbox ||
         !inputEl ||
+        !ckbBalanceWrap ||
+        !refreshCkbBalanceBtn ||
+        !ckbBalanceEl ||
         !createConnectBtn ||
         !hintEl ||
         !createInvoiceBtn ||
@@ -766,8 +801,47 @@ const setupNodeCard = (
         if (next !== "connected") {
             clearChannels("Connect to relay to load channels.");
         }
+        syncInputEnabled();
+        syncLocalSignCheckbox();
         updateActions();
         notifyState();
+    };
+
+    const syncInputEnabled = () => {
+        const hasNode = fiberClient.hasNode();
+        const isLocked = hasNode || status === "creating" || status === "connecting";
+        if (isLocked) {
+            inputEl.disabled = true;
+        } else {
+            inputEl.disabled = false;
+        }
+    };
+
+    const syncLocalSignCheckbox = () => {
+        const hasNode = fiberClient.hasNode();
+        const isLocked = hasNode || status === "creating" || status === "connecting";
+        localSignCheckbox.disabled = isLocked;
+    };
+
+    let isRefreshingBalance = false;
+    const refreshCkbBalance = async () => {
+        if (!isValidKey(inputEl.value)) {
+            ckbBalanceEl.textContent = "-";
+            return;
+        }
+        if (isRefreshingBalance) return;
+        isRefreshingBalance = true;
+        refreshCkbBalanceBtn.classList.add("is-spinning");
+        ckbBalanceEl.textContent = "...";
+        try {
+            const balanceShannons = await getCkbBalance(inputEl.value.trim());
+            ckbBalanceEl.textContent = `${formatShannonsToCkb(balanceShannons)} CKB`;
+        } catch (error) {
+            ckbBalanceEl.textContent = "Error";
+        } finally {
+            isRefreshingBalance = false;
+            refreshCkbBalanceBtn.classList.remove("is-spinning");
+        }
     };
 
     const updateActions = () => {
@@ -807,12 +881,13 @@ const setupNodeCard = (
             }
             setStatus("creating", "Starting WASM fiber node...");
             try {
-                await fiberClient.createNode(inputEl.value.trim());
+                const ckbKey = inputEl.value.trim();
+                await fiberClient.createNode(ckbKey);
                 setStatus("ready", "Node created. Ready to connect.");
             } catch (error) {
                 const message = error instanceof Error ? error.message : "Failed to create node.";
                 setStatus("error", message);
-                inputEl.disabled = false;
+                syncInputEnabled();
                 return;
             }
         }
@@ -842,7 +917,7 @@ const setupNodeCard = (
         try {
             await fiberClient.stopNode();
             setStatus("idle", "Node stopped.");
-            inputEl.disabled = false;
+            syncInputEnabled();
             unlockRelayAddress();
         } catch (error) {
             const message = error instanceof Error ? error.message : "Failed to stop node.";
@@ -896,8 +971,14 @@ const setupNodeCard = (
         if (status === "error") {
             setStatus("idle", "Enter a 0x-prefixed 32-byte key to start.");
         }
+        if (isValidKey(inputEl.value)) {
+            void refreshCkbBalance();
+        } else {
+            ckbBalanceEl.textContent = "-";
+        }
         updateActions();
     });
+    refreshCkbBalanceBtn.addEventListener("click", () => void refreshCkbBalance());
     createConnectBtn.addEventListener("click", () => {
         if (status === "connected") {
             void onStopNode();
@@ -908,6 +989,7 @@ const setupNodeCard = (
         }
         lockRelayAddress();
         inputEl.disabled = true;
+        localSignCheckbox.disabled = true;
         void onCreateConnect();
     });
     createChannelBtn.addEventListener("click", onCreateChannel);
@@ -915,6 +997,11 @@ const setupNodeCard = (
     payInvoiceBtn.addEventListener("click", onPayInvoice);
     refreshChannelsBtn.addEventListener("click", refreshChannels);
 
+    syncInputEnabled();
+    syncLocalSignCheckbox();
+    if (isValidKey(inputEl.value)) {
+        void refreshCkbBalance();
+    }
     updateActions();
     clearChannels("Connect to relay to load channels.");
 

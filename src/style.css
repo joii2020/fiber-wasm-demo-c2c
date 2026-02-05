@@ -131,6 +131,25 @@ body {
     gap: 12px;
 }
 
+.card-header-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.local-sign-wrap {
+    font-size: 0.85rem;
+    color: var(--muted);
+}
+
+.local-sign-wrap input[type="checkbox"] {
+    width: auto;
+    padding: 0;
+    margin-left: 6px;
+    vertical-align: middle;
+    accent-color: var(--accent);
+}
+
 .status {
     font-family: "IBM Plex Mono", ui-monospace, monospace;
     font-size: 0.75rem;
@@ -166,12 +185,74 @@ body {
     gap: 8px;
 }
 
+.field-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
 .field span {
     font-size: 0.85rem;
     color: var(--muted);
 }
 
-.field input {
+.ckb-balance-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.ckb-balance-wrap[hidden] {
+    display: none;
+}
+
+.ckb-balance-refresh {
+    border-radius: 999px;
+    padding: 4px;
+    width: 24px;
+    height: 24px;
+    border: 1px solid rgba(15, 47, 46, 0.2);
+    background: transparent;
+    color: var(--accent);
+    box-shadow: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: opacity 0.2s ease;
+}
+
+.ckb-balance-refresh:hover:not(:disabled) {
+    opacity: 0.8;
+}
+
+.ckb-balance-refresh svg {
+    width: 12px;
+    height: 12px;
+    fill: currentColor;
+}
+
+.ckb-balance-refresh.is-spinning svg {
+    animation: spin 0.9s linear infinite;
+}
+
+.ckb-balance {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.8rem;
+    color: var(--accent);
+}
+
+.field input[type="checkbox"] {
+    width: auto;
+    padding: 0;
+    margin-left: 6px;
+    vertical-align: middle;
+    accent-color: var(--accent);
+}
+
+.field input:not([type="checkbox"]) {
     width: 100%;
     padding: 12px 14px;
     border-radius: 12px;
