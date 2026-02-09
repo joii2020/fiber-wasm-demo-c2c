@@ -4,6 +4,10 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  fiber-wasm: file:../fiber/crates/fiber-wasm
+  fiber-wasm-db-worker: file:../fiber/crates/fiber-wasm-db-worker
+
 importers:
 
   .:
@@ -12,8 +16,8 @@ importers:
         specifier: ^1.12.3
         version: 1.12.5(typescript@5.9.3)
       '@nervosnetwork/fiber-js':
-        specifier: 0.6.1
-        version: 0.6.1
+        specifier: file:../fiber/fiber-js
+        version: file:../fiber/fiber-js
     devDependencies:
       '@biomejs/biome':
         specifier: 1.9.4
@@ -243,8 +247,8 @@ packages:
   '@nervosnetwork/ckb-types@0.109.5':
     resolution: {integrity: sha512-5jQNjFw76YCd+Ppl+0RvBWzxwvWaKfWC5wjVFFdNAieX7xksCHfZFIeow8je7AF8uVypwe56WlLBlblxw9NBBQ==}
 
-  '@nervosnetwork/fiber-js@0.6.1':
-    resolution: {integrity: sha512-eI8RALilZ4dd+eDyAPUxDhXAMB+fAUk65LuPdjQoetzZt0HPFZeMngf4gUcJQBMhuFJglsy22eoNmiYuZ8QaQA==}
+  '@nervosnetwork/fiber-js@file:../fiber/fiber-js':
+    resolution: {directory: ../fiber/fiber-js, type: directory}
 
   '@noble/ciphers@0.5.3':
     resolution: {integrity: sha512-B0+6IIHiqEs3BPMT0hcRmHvEj2QHOLu+uwt+tqDDeVd0oyVzh7BPrDcPjRnV1PV/5LaknXJJQvOuRGR0zQJz+w==}
@@ -789,7 +793,7 @@ snapshots:
 
   '@nervosnetwork/ckb-types@0.109.5': {}
 
-  '@nervosnetwork/fiber-js@0.6.1':
+  '@nervosnetwork/fiber-js@file:../fiber/fiber-js':
     dependencies:
       async-mutex: 0.5.0
       stream-browserify: 3.0.0

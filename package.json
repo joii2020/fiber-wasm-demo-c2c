@@ -3,6 +3,7 @@
     "version": "0.0.0",
     "type": "module",
     "scripts": {
+        "build:fiber-js": "cd ../fiber/fiber-js && pnpm run build",
         "dev": "vite",
         "build": "tsc && vite build",
         "preview": "vite preview",
@@ -12,7 +13,13 @@
     },
     "dependencies": {
         "@ckb-ccc/core": "^1.12.3",
-        "@nervosnetwork/fiber-js": "0.6.1"
+        "@nervosnetwork/fiber-js": "file:../fiber/fiber-js"
+    },
+    "pnpm": {
+        "overrides": {
+            "fiber-wasm": "file:../fiber/crates/fiber-wasm",
+            "fiber-wasm-db-worker": "file:../fiber/crates/fiber-wasm-db-worker"
+        }
     },
     "devDependencies": {
         "@biomejs/biome": "1.9.4",

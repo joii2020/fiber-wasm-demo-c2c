@@ -1,3 +1,4 @@
+import { Buffer } from "buffer";
 import "./style.css";
 import type { Channel, CkbInvoice } from "@nervosnetwork/fiber-js";
 import {
@@ -11,6 +12,10 @@ import {
     updateRelayNodeInfo,
 } from "./fiber";
 import { sleep } from "@ckb-ccc/core";
+
+if (!globalThis.Buffer) {
+    globalThis.Buffer = Buffer;
+}
 
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) {
@@ -50,7 +55,7 @@ app.innerHTML = `
                 <div class="card-header">
                     <div class="card-header-left">
                         <h2>Node A</h2>
-                        <span class="local-sign-wrap">LocalSign <input type="checkbox" data-role="local-sign" /></span>
+                        <span class="local-sign-wrap">LocalSign <input type="checkbox" data-role="local-sign" checked /></span>
                     </div>
                     <span class="status" data-role="status">Idle</span>
                 </div>
@@ -605,6 +610,13 @@ const setupNodeCard = (
     const localSignCheckbox = card.querySelector<HTMLInputElement>("[data-role='local-sign']");
     const inputEl = card.querySelector<HTMLInputElement>("[data-role='key-input']");
     const ckbBalanceWrap = card.querySelector<HTMLSpanElement>("[data-role='ckb-balance-wrap']");
+    const onCkbBalanceWrapClick = (event: MouseEvent) => {
+        const target = event.target as HTMLElement | null;
+        if (!target) return;
+        if (target.closest("[data-role='refresh-ckb-balance']")) return;
+        event.preventDefault();
+        event.stopPropagation();
+    };
     const refreshCkbBalanceBtn = card.querySelector<HTMLButtonElement>("[data-role='refresh-ckb-balance']");
     const ckbBalanceEl = card.querySelector<HTMLSpanElement>("[data-role='ckb-balance']");
     const createConnectBtn = card.querySelector<HTMLButtonElement>("[data-role='create-connect']");
@@ -639,6 +651,8 @@ const setupNodeCard = (
     ) {
         throw new Error("Missing node UI elements");
     }
+
+    ckbBalanceWrap.addEventListener("click", onCkbBalanceWrapClick);
 
     const nodeRole = card.dataset.node;
     if (nodeRole === "left") {
@@ -888,14 +902,19 @@ const setupNodeCard = (
             return;
         }
         if (!fiberClient.hasNode()) {
-            if (!isValidKey(inputEl.value)) {
+            const useLocalSign = localSignCheckbox.checked;
+            if (!useLocalSign && !isValidKey(inputEl.value)) {
                 setStatus("error", "Key must be 0x + 64 hex chars.");
+                return;
+            }
+            if (useLocalSign && !isValidKey(inputEl.value)) {
+                setStatus("error", "LocalSign mode requires CKB key for signing funding tx.");
                 return;
             }
             setStatus("creating", "Starting WASM fiber node...");
             try {
                 const ckbKey = inputEl.value.trim();
-                await fiberClient.createNode(ckbKey);
+                await fiberClient.createNode(useLocalSign ? undefined : ckbKey, useLocalSign);
                 setStatus("ready", "Node created. Ready to connect.");
             } catch (error) {
                 const message = error instanceof Error ? error.message : "Failed to create node.";
@@ -945,12 +964,21 @@ const setupNodeCard = (
         if (!ensureConnected("Connect to relay before creating a channel.")) {
             return;
         }
+        const useLocalSign = localSignCheckbox.checked;
+        if (useLocalSign && !isValidKey(inputEl.value)) {
+            hintEl.textContent = "LocalSign mode requires CKB key for signing funding tx.";
+            return;
+        }
         isCreatingChannel = true;
         channelEmptyEl.textContent = "Creating channel...";
         channelEmptyEl.hidden = false;
         updateActions();
         try {
-            await fiberClient.openChannel(getRelayInfoFromUI());
+            await fiberClient.openChannel(
+                getRelayInfoFromUI(),
+                useLocalSign,
+                useLocalSign ? inputEl.value.trim() : undefined,
+            );
             hintEl.textContent = "Channel request sent.";
             await refreshChannels();
         } catch (error) {
@@ -1109,7 +1137,7 @@ fundRelayBtn.addEventListener("click", async () => {
             fiberNodes.right.sendRelayFunds(relayInfo, 300n),
         ]);
     } finally {
-        await sleep(500);
+        await sleep(5000);
         await Promise.all(nodeControllers.map((controller) => controller.refreshChannels()));
     }
 });

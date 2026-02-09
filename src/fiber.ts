@@ -1,5 +1,17 @@
-import { ClientPublicTestnet, SignerCkbPrivateKey, bytesFrom, hexFrom } from "@ckb-ccc/core";
-import { Fiber, randomSecretKey } from "@nervosnetwork/fiber-js";
+import {
+    ClientPublicTestnet,
+    SignerCkbPrivateKey,
+    Transaction,
+    bytesFrom,
+    hexFrom,
+    stringify,
+} from "@ckb-ccc/core";
+import {
+    Fiber,
+    randomSecretKey,
+    type CkbJsonRpcTransaction,
+    type OpenChannelWithExternalFundingResult,
+} from "@nervosnetwork/fiber-js";
 import type { HexString, InvoiceResult, NewInvoiceParams } from "@nervosnetwork/fiber-js";
 
 const parseCkbRpcUrl = (config: string): string => {
@@ -93,6 +105,97 @@ const loadConfig = () => {
 
 export const isValidKey = (value: string) => /^0x[0-9a-fA-F]{64}$/.test(value.trim());
 
+let fiberWasmBuildLogged = false;
+const logFiberWasmBuildTime = () => {
+    if (fiberWasmBuildLogged) {
+        return;
+    }
+    fiberWasmBuildLogged = true;
+    console.info(`[fiber-wasm] build time: ${import.meta.env.VITE_FIBER_WASM_BUILD_TIME}`);
+};
+
+/** Convert CKB JSON-RPC transaction to @ckb-ccc Transaction format */
+function ckbJsonRpcTxToCccTx(tx: CkbJsonRpcTransaction): import("@ckb-ccc/core").Transaction {
+    const numFrom = (v: string | bigint) =>
+        typeof v === "bigint" ? v : BigInt(v.startsWith("0x") ? v : `0x${v}`);
+    return Transaction.from({
+        version: numFrom(tx.version ?? "0x0"),
+        cellDeps: (tx.cell_deps ?? []).map((d) => ({
+            outPoint: {
+                txHash: d.out_point.tx_hash,
+                index: numFrom(d.out_point.index),
+            },
+            // JSON-RPC uses "dep_group" while @ckb-ccc uses "depGroup"
+            depType: d.dep_type === "dep_group" ? "depGroup" : "code",
+        })),
+        headerDeps: tx.header_deps ?? [],
+        inputs: (tx.inputs ?? []).map((i) => ({
+            previousOutput: {
+                txHash: i.previous_output.tx_hash,
+                index: numFrom(i.previous_output.index),
+            },
+            since: numFrom(i.since ?? "0x0"),
+        })),
+        outputs: (tx.outputs ?? []).map((o) => ({
+            capacity: numFrom(o.capacity),
+            lock: {
+                codeHash: o.lock.code_hash,
+                hashType: o.lock.hash_type as "type" | "data" | "data1" | "data2",
+                args: o.lock.args,
+            },
+            type: o.type
+                ? {
+                    codeHash: o.type.code_hash,
+                    hashType: o.type.hash_type as "type" | "data" | "data1" | "data2",
+                    args: o.type.args,
+                }
+                : undefined,
+        })),
+        outputsData: tx.outputs_data ?? [],
+        witnesses: tx.witnesses ?? [],
+    });
+}
+
+/** Convert @ckb-ccc Transaction back to CKB JSON-RPC format for submit */
+function cccTxToCkbJsonRpcTx(tx: import("@ckb-ccc/core").Transaction): CkbJsonRpcTransaction {
+    const toHex = (v: bigint) => `0x${v.toString(16)}` as HexString;
+    return {
+        version: toHex(tx.version) as HexString,
+        cell_deps: tx.cellDeps.map((d) => ({
+            dep_type: d.depType === "depGroup" ? "dep_group" : "code",
+            out_point: {
+                tx_hash: d.outPoint.txHash as HexString,
+                index: toHex(d.outPoint.index),
+            },
+        })),
+        header_deps: tx.headerDeps.map((h) => h as HexString),
+        inputs: tx.inputs.map((i) => ({
+            previous_output: {
+                tx_hash: i.previousOutput.txHash as HexString,
+                index: toHex(i.previousOutput.index),
+            },
+            since: toHex(i.since),
+        })),
+        outputs: tx.outputs.map((o) => ({
+            capacity: toHex(o.capacity),
+            lock: {
+                code_hash: o.lock.codeHash as HexString,
+                hash_type: o.lock.hashType,
+                args: o.lock.args,
+            },
+            type: o.type
+                ? {
+                    code_hash: o.type.codeHash as HexString,
+                    hash_type: o.type.hashType,
+                    args: o.type.args,
+                }
+                : undefined,
+        })),
+        outputs_data: tx.outputsData.map((d) => d as HexString),
+        witnesses: tx.witnesses.map((w) => w as HexString),
+    };
+}
+
 export class FiberNode {
     private nodeName: string;
     private fiber: Fiber | null = null;
@@ -125,7 +228,12 @@ export class FiberNode {
         return hexFrom(this.getFiberKey());
     }
 
-    async createNode(ckbSecretKey: string | undefined) {
+    /**
+     * Create the fiber node.
+     * @param ckbSecretKey - CKB secret key. When localSign is true, pass undefined so fiber does not store the key.
+     * @param localSign - If true, use external funding (user signs tx locally). Fiber will not receive the CKB key.
+     */
+    async createNode(ckbSecretKey: string | undefined, localSign = false) {
         if (this.fiber != null) {
             console.warn(`Node(${this.nodeName}) fiber has been created`);
             return;
@@ -134,11 +242,20 @@ export class FiberNode {
         const fiber = new Fiber();
 
         const fiberKeyPair = this.getFiberKey();
-        const ckbKey = ckbSecretKey != null ? bytesFrom(ckbSecretKey) : undefined;
+        const ckbKey =
+            localSign ? undefined : ckbSecretKey != null ? bytesFrom(ckbSecretKey) : undefined;
         const timer = new Timer(`fiber.start ${this.nodeName}`);
-        await fiber.start(config, fiberKeyPair, ckbKey as Uint8Array, undefined, "error", `/wasm-${this.nodeName}`);
+        await fiber.start(
+            config,
+            fiberKeyPair,
+            ckbKey as Uint8Array | undefined,
+            undefined,
+            "info",
+            `/wasm-${this.nodeName}`,
+        );
+        logFiberWasmBuildTime();
         timer.stop();
-        this.fiber = fiber
+        this.fiber = fiber;
     }
 
     async connectRelay(relayInfo: RelayNodeInfo) {
@@ -184,16 +301,63 @@ export class FiberNode {
         });
     }
 
-    async openChannel(relayInfo: RelayNodeInfo) {
+    /**
+     * Open a channel. When localSign is true, uses external funding: fiber returns unsigned tx,
+     * we sign it locally with ckbSecretKey, then submit.
+     */
+    async openChannel(
+        relayInfo: RelayNodeInfo,
+        localSign = false,
+        ckbSecretKey?: string,
+    ) {
         if (!this.fiber) {
             throw new Error("Fiber node not created.");
         }
         const timer = new Timer(`fiber.openChannel ${this.nodeName}`);
-        await this.fiber.openChannel({
-            peer_id: relayInfo.peerId,
-            funding_amount: DEFAULT_FUNDING_AMOUNT_HEX,
-            public: true,
-        });
+
+        if (localSign && ckbSecretKey) {
+            const config = await loadConfig();
+            const rpcUrl = parseCkbRpcUrl(config);
+            const client = new ClientPublicTestnet({ url: rpcUrl });
+            const signer = new SignerCkbPrivateKey(client, ckbSecretKey);
+            const address = await signer.getAddressObjSecp256k1();
+            const lockScript = address.script;
+
+            const result: OpenChannelWithExternalFundingResult =
+                await this.fiber.openChannelWithExternalFunding({
+                    peer_id: relayInfo.peerId,
+                    funding_amount: DEFAULT_FUNDING_AMOUNT_HEX,
+                    public: true,
+                    shutdown_script: {
+                        code_hash: lockScript.codeHash,
+                        hash_type: lockScript.hashType,
+                        args: lockScript.args,
+                    },
+                    funding_lock_script: {
+                        code_hash: lockScript.codeHash,
+                        hash_type: lockScript.hashType,
+                        args: lockScript.args,
+                    },
+                });
+
+            const cccTx = ckbJsonRpcTxToCccTx(result.unsigned_funding_tx);
+            await signer.prepareTransaction(cccTx);
+            const signedTx = await signer.signOnlyTransaction(cccTx);
+            const signedJsonTx = cccTxToCkbJsonRpcTx(signedTx);
+
+            console.log(`signedJsonTx: ${stringify(signedJsonTx)}`);
+            await this.fiber.submitSignedFundingTx({
+                channel_id: result.temporary_channel_id,
+                signed_funding_tx: signedJsonTx,
+            });
+        } else {
+            await this.fiber.openChannel({
+                peer_id: relayInfo.peerId,
+                funding_amount: DEFAULT_FUNDING_AMOUNT_HEX,
+                public: true,
+            });
+        }
+        timer.stop();
     }
 
     async listChannels() {
