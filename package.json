@@ -12,14 +12,9 @@
         "lint": "biome lint ."
     },
     "dependencies": {
+        "buffer": "^6.0.3",
         "@ckb-ccc/core": "^1.12.3",
-        "@nervosnetwork/fiber-js": "file:../fiber/fiber-js"
-    },
-    "pnpm": {
-        "overrides": {
-            "fiber-wasm": "file:../fiber/crates/fiber-wasm",
-            "fiber-wasm-db-worker": "file:../fiber/crates/fiber-wasm-db-worker"
-        }
+        "@nervosnetwork/fiber-js": "git+https://github.com/joii2020/fiber-wasm-dist.git#070cb5989f6275181cdd907fac2537fdcd5a6445"
     },
     "devDependencies": {
         "@biomejs/biome": "1.9.4",

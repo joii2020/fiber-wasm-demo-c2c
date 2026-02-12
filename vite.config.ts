@@ -22,17 +22,32 @@ export default defineConfig({
     base: "./",
     define: {
         "import.meta.env.VITE_FIBER_WASM_BUILD_TIME": JSON.stringify(fiberWasmBuildTime),
+        global: "globalThis",
+    },
+    resolve: {
+        alias: {
+            buffer: "buffer/",
+        },
+    },
+    optimizeDeps: {
+        include: ["buffer"],
     },
     server: {
         headers: {
             "Cross-Origin-Opener-Policy": "same-origin",
             "Cross-Origin-Embedder-Policy": "require-corp",
+            "Cache-Control": "no-store",
+            Pragma: "no-cache",
+            Expires: "0",
         },
     },
     preview: {
         headers: {
             "Cross-Origin-Opener-Policy": "same-origin",
             "Cross-Origin-Embedder-Policy": "require-corp",
+            "Cache-Control": "no-store",
+            Pragma: "no-cache",
+            Expires: "0",
         },
     },
 });

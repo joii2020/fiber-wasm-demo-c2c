@@ -2,6 +2,7 @@ import {
     ClientPublicTestnet,
     SignerCkbPrivateKey,
     Transaction,
+    WitnessArgs,
     bytesFrom,
     hexFrom,
     stringify,
@@ -45,7 +46,7 @@ const parseRelayPeerId = (address: string) =>
     address.trim().match(/\/p2p\/([^/]+)(?:\/|$)/)?.[1] ?? "";
 
 export const relayNodeInfo = {
-    address: "/ip4/127.0.0.1/tcp/8248/ws/p2p/QmdzY4DaMZjcB7tW91njRkHj8uootQXyzbFrxXTSVsQqEp",
+    address: "/ip4/127.0.0.1/tcp/8248/ws/p2p/QmcMXciBEWiJjCnNCmNEy4sCdKASFWNnmBvU4BZHRd4sGT",
 };
 
 export const getRelayNodeInfo = (): RelayNodeInfo => {
@@ -159,6 +160,23 @@ function ckbJsonRpcTxToCccTx(tx: CkbJsonRpcTransaction): import("@ckb-ccc/core")
 /** Convert @ckb-ccc Transaction back to CKB JSON-RPC format for submit */
 function cccTxToCkbJsonRpcTx(tx: import("@ckb-ccc/core").Transaction): CkbJsonRpcTransaction {
     const toHex = (v: bigint) => `0x${v.toString(16)}` as HexString;
+    const toHexBytes = (value: unknown): HexString => {
+        if (typeof value === "string") {
+            return value as HexString;
+        }
+        if (value instanceof Uint8Array) {
+            return hexFrom(value) as HexString;
+        }
+        if (value instanceof ArrayBuffer) {
+            return hexFrom(new Uint8Array(value)) as HexString;
+        }
+        if (ArrayBuffer.isView(value)) {
+            const view = value as ArrayBufferView;
+            return hexFrom(new Uint8Array(view.buffer, view.byteOffset, view.byteLength)) as HexString;
+        }
+        const text = String(value);
+        return text as HexString;
+    };
     return {
         version: toHex(tx.version) as HexString,
         cell_deps: tx.cellDeps.map((d) => ({
@@ -191,8 +209,8 @@ function cccTxToCkbJsonRpcTx(tx: import("@ckb-ccc/core").Transaction): CkbJsonRp
                 }
                 : undefined,
         })),
-        outputs_data: tx.outputsData.map((d) => d as HexString),
-        witnesses: tx.witnesses.map((w) => w as HexString),
+        outputs_data: tx.outputsData.map((d) => toHexBytes(d)),
+        witnesses: tx.witnesses.map((w) => toHexBytes(w)),
     };
 }
 
@@ -323,6 +341,7 @@ export class FiberNode {
             const address = await signer.getAddressObjSecp256k1();
             const lockScript = address.script;
 
+            console.log(`lock args: ${stringify(lockScript)}`);
             const result: OpenChannelWithExternalFundingResult =
                 await this.fiber.openChannelWithExternalFunding({
                     peer_id: relayInfo.peerId,
@@ -340,12 +359,18 @@ export class FiberNode {
                     },
                 });
 
-            const cccTx = ckbJsonRpcTxToCccTx(result.unsigned_funding_tx);
-            await signer.prepareTransaction(cccTx);
-            const signedTx = await signer.signOnlyTransaction(cccTx);
+            console.log(`openChannelWithExternalFunding unsigned_funding_tx: ${stringify(result.unsigned_funding_tx)}`);
+            const tx = ckbJsonRpcTxToCccTx(result.unsigned_funding_tx);
+
+            const witness = tx.getWitnessArgsAt(0) ?? WitnessArgs.from({});
+            witness.lock = hexFrom(new Uint8Array(65));
+            tx.setWitnessArgsAt(0, witness);
+
+            const signedTx = await signer.signOnlyTransaction(tx);
             const signedJsonTx = cccTxToCkbJsonRpcTx(signedTx);
 
             console.log(`signedJsonTx: ${stringify(signedJsonTx)}`);
+            console.log(`signedTxHash: ${signedTx.hash()}`);
             await this.fiber.submitSignedFundingTx({
                 channel_id: result.temporary_channel_id,
                 signed_funding_tx: signedJsonTx,
